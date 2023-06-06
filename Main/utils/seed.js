@@ -1,51 +1,45 @@
-const connection = require('../config/connection');
-const { Course, Student } = require('../models');
-const { getRandomName, getRandomAssignments } = require('./data');
+// Seed Data
+const { connect, connection } = require('mongoose');
+const { User, Thought } = require('../models');
+const { userDb, thoughtDb, reactionDb } = require('./data');
 
-connection.on('error', (err) => err);
-
-connection.once('open', async () => {
-  console.log('connected');
-
-  // Drop existing courses
-  await Course.deleteMany({});
-
-  // Drop existing students
-  await Student.deleteMany({});
-
-  // Create empty array to hold the students
-  const students = [];
-
-  // Loop 20 times -- add students to the students array
-  for (let i = 0; i < 20; i++) {
-    // Get some random assignment objects using a helper function that we imported from ./data
-    const assignments = getRandomAssignments(20);
-
-    const fullName = getRandomName();
-    const first = fullName.split(' ')[0];
-    const last = fullName.split(' ')[1];
-    const github = `${first}${Math.floor(Math.random() * (99 - 18 + 1) + 18)}`;
-
-    students.push({
-      first,
-      last,
-      github,
-      assignments,
+const seedDatabase = async () => {
+  try {
+    await connect('mongodb://127.0.0.1:27017/socialDB', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     });
+
+    console.log('Connected to the database');
+
+    await User.deleteMany({});
+    await Thought.deleteMany({});
+
+  
+    const users = await User.insertMany(userDb);
+
+    const frank = users.find(user => user.userName === 'Frank');
+    const james = users.find(user => user.userName === 'James');
+
+    frank.friends.push(james._id);
+    james.friends.push(frank._id);
+
+    await frank.save();
+    await james.save();
+
+    for (const thoughtData of thoughtDb) {
+      const thought = new Thought(thoughtData);
+      await thought.save();
+    }
+
+    console.log('Seed data inserted successfully');
+
+    // Disconnect from the database
+    await connection.close();
+    console.log('Disconnected from the database');
+  } catch (error) {
+    console.error('Seed script encountered an error:', error);
   }
+};
 
-  // Add students to the collection and await the results
-  await Student.collection.insertMany(students);
-
-  // Add courses to the collection and await the results
-  await Course.collection.insertOne({
-    courseName: 'UCLA',
-    inPerson: false,
-    students: [...students],
-  });
-
-  // Log out the seed data to indicate what should appear in the database
-  console.table(students);
-  console.info('Seeding complete! 🌱');
-  process.exit(0);
-});
+seedDatabase();
